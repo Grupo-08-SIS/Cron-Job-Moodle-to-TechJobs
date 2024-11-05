@@ -11,29 +11,30 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 
 @Service
-class MoodleService (
-    @Qualifier("moodleJdbcTemplate")
-    private val jdbcTemplateMoodle: JdbcTemplate
+class MoodleService(
+    @Qualifier("moodleJdbcTemplate") private val jdbcTemplateMoodle: JdbcTemplate
 ) {
 
     fun buscarCursos(): List<CursoMoodleDto> {
         val sql = """
         SELECT
-            mdl_course.id AS id_curso,
-            mdl_course.fullname AS nome_curso,
-            categoria.name AS curso_categoria,
-            COUNT(atividade.id) AS total_atividades,
-            COUNT(DISTINCT nota.userid) AS total_alunos_com_notas
-        FROM
-            mdl_course
-        JOIN
-            mdl_grade_items atividade ON atividade.courseid = mdl_course.id
-        JOIN 
-			mdl_course_categories AS categoria ON categoria.id =  mdl_course.category
-        LEFT JOIN
-            mdl_grade_grades nota ON nota.itemid = atividade.id
-        GROUP BY
-            mdl_course.id, mdl_course.fullname;
+    mdl_course.id AS id_curso,
+    mdl_course.fullname AS nome_curso,
+    categoria.name AS curso_categoria,
+    COUNT(DISTINCT atividade.id) AS total_atividades, 
+    COUNT(DISTINCT nota.userid) AS total_alunos_com_notas
+FROM
+    mdl_course
+JOIN
+    mdl_grade_items atividade ON atividade.courseid = mdl_course.id
+JOIN 
+    mdl_course_categories AS categoria ON categoria.id = mdl_course.category
+LEFT JOIN
+    mdl_grade_grades nota ON nota.itemid = atividade.id
+WHERE  
+    atividade.itemmodule != 'course' 
+GROUP BY
+    mdl_course.id, mdl_course.fullname, categoria.name;
     """
 
         val cursos = jdbcTemplateMoodle.query(sql) { rs, _ ->
@@ -85,7 +86,7 @@ class MoodleService (
                     alunoId = rs.getLong("aluno_id"),
                     alunoEmail = rs.getString("aluno_email"),
                     cursoNome = rs.getString("curso_nome"),
-                    dataEntrega = "Não entregue", // ou qualquer mensagem que faça sentido
+                    dataEntrega = null,
                     nomeAtividade = nomeAtividade ?: "Atividade não informada",
                     notaAtividade = notaAtividade,
                     cursoId = rs.getLong("curso_id"),
