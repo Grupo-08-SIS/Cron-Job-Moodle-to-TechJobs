@@ -18,19 +18,56 @@ class TechJobsDbService(
     fun cadastrarCursos(cursos: List<CursoMoodleDto>) {
 
         cursos.forEach { curso ->
+
+            val categoriaExistente = jdbcTemplateTechJobs.queryForObject(
+                "SELECT id FROM categoria WHERE nome = ?",
+                arrayOf(curso.categoria),
+                Long::class.java
+            )
+
+            val categoriaId = categoriaExistente ?: run {
+                val sqlInserirCategoria = "INSERT INTO categoria (nome) VALUES (?)"
+                jdbcTemplateTechJobs.update(sqlInserirCategoria, curso.categoria)
+                jdbcTemplateTechJobs.queryForObject(
+                    "SELECT LAST_INSERT_ID()",
+                    Long::class.java
+                )
+            }
+
             val sqlInserirCurso = """
-            INSERT INTO curso (id, nome, categoria, total_atividades, total_atividades_do_aluno)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO curso_moodle (id, nome)
+            VALUES (?, ?)
             ON DUPLICATE KEY UPDATE
-            nome = VALUES(nome),
-            categoria = VALUES(categoria),
-            total_atividades = VALUES(total_atividades),
-            total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
+            nome = VALUES(nome)
         """
             jdbcTemplateTechJobs.update(
                 sqlInserirCurso,
-                curso.id, curso.nome, curso.categoria, curso.totalAtividades, curso.totalAtividadesDoAluno
+                curso.id, curso.nome
             )
+
+            // Inserir a relação ManyToMany na tabela curso_categoria
+            val sqlInserirRelacao = """
+            INSERT INTO curso_categoria (curso_id, categoria_id)
+            VALUES (?, ?)
+        """
+            jdbcTemplateTechJobs.update(
+                sqlInserirRelacao,
+                curso.id, categoriaId
+            )
+
+//            val sqlInserirCurso = """
+//            INSERT INTO curso (id, nome, categoria, total_atividades, total_atividades_do_aluno)
+//            VALUES (?, ?, ?, ?, ?)
+//            ON DUPLICATE KEY UPDATE
+//            nome = VALUES(nome),
+//            categoria = VALUES(categoria),
+//            total_atividades = VALUES(total_atividades),
+//            total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
+//        """
+//            jdbcTemplateTechJobs.update(
+//                sqlInserirCurso,
+//                curso.id, curso.nome, curso.categoria, curso.totalAtividades, curso.totalAtividadesDoAluno
+//            )
         }
     }
 
@@ -46,7 +83,14 @@ class TechJobsDbService(
         """
             jdbcTemplateTechJobs.update(
                 sqlInserirPontuacao,
-                pontuacao.alunoId, pontuacao.alunoEmail, pontuacao.cursoId, pontuacao.cursoNome, pontuacao.dataEntrega, pontuacao.nomeAtividade, pontuacao.notaAtividade, pontuacao.notaAluno
+                pontuacao.alunoId,
+                pontuacao.alunoEmail,
+                pontuacao.cursoId,
+                pontuacao.cursoNome,
+                pontuacao.dataEntrega,
+                pontuacao.nomeAtividade,
+                pontuacao.notaAtividade,
+                pontuacao.notaAluno
             )
         }
     }
