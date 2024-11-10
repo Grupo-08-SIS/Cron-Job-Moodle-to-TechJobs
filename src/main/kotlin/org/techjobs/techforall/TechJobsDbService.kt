@@ -2,6 +2,7 @@ package org.techjobs.techforall
 
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.dao.EmptyResultDataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.techjobs.techforall.config.TechJobsDbConfig
@@ -18,12 +19,15 @@ class TechJobsDbService(
     fun cadastrarCursos(cursos: List<CursoMoodleDto>) {
 
         cursos.forEach { curso ->
-
-            val categoriaExistente = jdbcTemplateTechJobs.queryForObject(
-                "SELECT id FROM categoria WHERE nome = ?",
-                arrayOf(curso.categoria),
-                Long::class.java
-            )
+            val categoriaExistente = try {
+                jdbcTemplateTechJobs.queryForObject(
+                    "SELECT id FROM categoria WHERE nome = ?",
+                    arrayOf(curso.categoria),
+                    Long::class.java
+                )
+            } catch (e: EmptyResultDataAccessException) {
+                null
+            }
 
             val categoriaId = categoriaExistente ?: run {
                 val sqlInserirCategoria = "INSERT INTO categoria (nome) VALUES (?)"
@@ -89,7 +93,6 @@ class TechJobsDbService(
     }
 
     fun cadastrarPontuacoes(pontuacoes: List<PontuacaoMoodleDto>) {
-
         pontuacoes.forEach { pontuacao ->
             val pontuacaoExistente = jdbcTemplateTechJobs.queryForList(
                 "SELECT * FROM pontuacao WHERE aluno_id = ? AND curso_id = ? AND nome_atividade = ?",
