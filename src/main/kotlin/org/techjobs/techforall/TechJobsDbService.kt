@@ -44,89 +44,68 @@ class TechJobsDbService(
             ON DUPLICATE KEY UPDATE
             nome = VALUES(nome)
         """
-            jdbcTemplateTechJobs.update(
-                sqlInserirCurso,
+
+            val cursoExistente = jdbcTemplateTechJobs.queryForList(
+                "SELECT * FROM curso_moodle WHERE id = ? AND nome = ?",
                 curso.id, curso.nome
+            ).isEmpty()
+
+            if (cursoExistente) {
+                val sqlInserirCurso = """
+                INSERT INTO curso_moodle (id, nome)
+                VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE
+                nome = VALUES(nome)
+            """
+                jdbcTemplateTechJobs.update(
+                    sqlInserirCurso,
+                    curso.id, curso.nome
+                )
+            }
+
+            val relacaoExistente = jdbcTemplateTechJobs.queryForObject(
+                "SELECT COUNT(*) FROM curso_categoria WHERE curso_id = ? AND categoria_id = ?",
+                arrayOf(curso.id, categoriaId),
+                Int::class.java
             )
 
-            val sqlInserirRelacao = """
-            INSERT INTO curso_categoria (curso_id, categoria_id)
-            VALUES (?, ?)
-        """
-            jdbcTemplateTechJobs.update(
-                sqlInserirRelacao,
-                curso.id, categoriaId
-            )
+            if (relacaoExistente == 0) {
+                val sqlInserirRelacao = """
+                INSERT INTO curso_categoria (curso_id, categoria_id)
+                VALUES (?, ?)
+            """
+                jdbcTemplateTechJobs.update(
+                    sqlInserirRelacao,
+                    curso.id, categoriaId
+                )
+            }
 
-            val sqlInserirCursoPontos = """
-            INSERT INTO curso (id, nome, total_atividades, total_atividades_do_aluno)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-            nome = VALUES(nome),
-            total_atividades = VALUES(total_atividades),
-            total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
-        """
-            jdbcTemplateTechJobs.update(
-                sqlInserirCursoPontos,
-                curso.id, curso.nome, curso.totalAtividades, curso.totalAtividadesDoAluno
-            )
+            // Inserir a relação ManyToMany na tabela curso_categoria
+//            val sqlInserirRelacao = """
+//            INSERT INTO curso_categoria (curso_id, categoria_id)
+//            VALUES (?, ?)
+//        """
+//            jdbcTemplateTechJobs.update(
+//                sqlInserirRelacao,
+//                curso.id, categoriaId
+//            )
         }
     }
 
     fun cadastrarPontuacoes(pontuacoes: List<PontuacaoMoodleDto>) {
         pontuacoes.forEach { pontuacao ->
+            val pontuacaoExistente = jdbcTemplateTechJobs.queryForList(
+                "SELECT * FROM pontuacao WHERE aluno_id = ? AND curso_id = ? AND nome_atividade = ?",
+                pontuacao.alunoId, pontuacao.cursoId, pontuacao.nomeAtividade
+            ).isEmpty()
 
-            val cursoExistente = try {
-                jdbcTemplateTechJobs.queryForObject(
-                    "SELECT id FROM curso WHERE id = ?",
-                    arrayOf(pontuacao.cursoId),
-                    Long::class.java
-                )
-            } catch (e: EmptyResultDataAccessException) {
-                null
-            }
-
-            // If curso_id does not exist, insert it
-            if (cursoExistente == null) {
-                val sqlInserirCurso = """
-                INSERT INTO curso (id, nome, total_atividades, total_atividades_do_aluno)
-                VALUES (?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                nome = VALUES(nome),
-                total_atividades = VALUES(total_atividades),
-                total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
-            """
-                jdbcTemplateTechJobs.update(
-                    sqlInserirCurso,
-                    pontuacao.cursoId, pontuacao.cursoNome, 0, 0
-                )
-            }
-
-            val alunoExistente = try {
-                jdbcTemplateTechJobs.queryForObject(
-                    "SELECT id FROM aluno WHERE id = ?",
-                    arrayOf(pontuacao.alunoId),
-                    Long::class.java
-                )
-            } catch (e: EmptyResultDataAccessException) {
-                null
-            }
-
-
-            val pontuacaoExistente = try {
-                jdbcTemplateTechJobs.queryForObject(
-                    "SELECT 1 FROM pontuacao WHERE aluno_id = ? AND curso_id = ? AND nome_atividade = ?",
-                    arrayOf(pontuacao.alunoId, pontuacao.cursoId, pontuacao.nomeAtividade),
-                    Int::class.java
-                )
-            } catch (e: EmptyResultDataAccessException) {
-                null
-            }
-
-            if (pontuacaoExistente == null) {
+            if (pontuacaoExistente) {
                 val sqlInserirPontuacao = """
                 INSERT INTO pontuacao (aluno_id, aluno_email, curso_id, curso_nome, data_entrega, nome_atividade, nota_atividade, nota_aluno)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                data_entrega = VALUES(data_entrega),
+                nota_aluno = VALUES(nota_aluno)
             """
                 jdbcTemplateTechJobs.update(
                     sqlInserirPontuacao,
@@ -146,16 +125,23 @@ class TechJobsDbService(
     fun cadastrarTemposSessao(temposSessao: List<TempoSessaoMoodleDto>) {
 
         temposSessao.forEach { tempo ->
-            val sqlInserirSessao = """
-            INSERT INTO tempo_sessao (aluno_id, aluno_email, dia_sessao, qtd_tempo_sessao)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-            qtd_tempo_sessao = VALUES(qtd_tempo_sessao)
-        """
-            jdbcTemplateTechJobs.update(
-                sqlInserirSessao,
-                tempo.alunoId, tempo.alunoEmail, tempo.diaSessao, tempo.qtdTempoSessao
-            )
+            val sessaoExistente = jdbcTemplateTechJobs.queryForList(
+                "SELECT * FROM tempo_sessao WHERE aluno_id = ? AND dia_sessao = ?",
+                tempo.alunoId, tempo.diaSessao
+            ).isEmpty()
+
+            if (sessaoExistente) {
+                val sqlInserirSessao = """
+                INSERT INTO tempo_sessao (aluno_id, aluno_email, dia_sessao, qtd_tempo_sessao)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                qtd_tempo_sessao = VALUES(qtd_tempo_sessao)
+            """
+                jdbcTemplateTechJobs.update(
+                    sqlInserirSessao,
+                    tempo.alunoId, tempo.alunoEmail, tempo.diaSessao, tempo.qtdTempoSessao
+                )
+            }
         }
     }
 }
