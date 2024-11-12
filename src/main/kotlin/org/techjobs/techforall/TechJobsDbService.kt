@@ -38,13 +38,6 @@ class TechJobsDbService(
                 )
             }
 
-            val sqlInserirCurso = """
-            INSERT INTO curso_moodle (id, nome)
-            VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE
-            nome = VALUES(nome)
-        """
-
             val cursoExistente = jdbcTemplateTechJobs.queryForList(
                 "SELECT * FROM curso_moodle WHERE id = ? AND nome = ?",
                 curso.id, curso.nome
@@ -80,15 +73,26 @@ class TechJobsDbService(
                 )
             }
 
-            // Inserir a relação ManyToMany na tabela curso_categoria
-//            val sqlInserirRelacao = """
-//            INSERT INTO curso_categoria (curso_id, categoria_id)
-//            VALUES (?, ?)
-//        """
-//            jdbcTemplateTechJobs.update(
-//                sqlInserirRelacao,
-//                curso.id, categoriaId
-//            )
+            val cursoExistenteNaTabelaCurso = jdbcTemplateTechJobs.queryForList(
+                "SELECT * FROM curso WHERE id = ? AND nome = ?",
+                curso.id, curso.nome
+            ).isEmpty()
+
+            if (cursoExistenteNaTabelaCurso) {
+                val sqlInserirCurso = """
+            INSERT INTO curso (id, nome, total_atividades, total_atividades_do_aluno)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                nome = VALUES(nome),
+                total_atividades = VALUES(total_atividades),
+                total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
+        """
+                jdbcTemplateTechJobs.update(
+                    sqlInserirCurso,
+                    curso.id, curso.nome, curso.totalAtividades, curso.totalAtividadesDoAluno
+                )
+            }
+
         }
     }
 
@@ -132,14 +136,14 @@ class TechJobsDbService(
 
             if (sessaoExistente) {
                 val sqlInserirSessao = """
-                INSERT INTO tempo_sessao (aluno_id, aluno_email, dia_sessao, qtd_tempo_sessao)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO tempo_sessao (aluno_id, dia_sessao, qtd_tempo_sessao)
+                VALUES (?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                 qtd_tempo_sessao = VALUES(qtd_tempo_sessao)
             """
                 jdbcTemplateTechJobs.update(
                     sqlInserirSessao,
-                    tempo.alunoId, tempo.alunoEmail, tempo.diaSessao, tempo.qtdTempoSessao
+                    tempo.alunoId, tempo.diaSessao, tempo.qtdTempoSessao
                 )
             }
         }
