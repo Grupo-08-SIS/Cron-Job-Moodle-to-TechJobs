@@ -5,7 +5,6 @@ data class PontuacaoMoodleDto(
     val alunoEmail: String,
     val cursoNome: String,
     val cursoId: Long,
-    val cursoCategoria: String,
     val dataEntrega: String?,
     val nomeAtividade: String,
     val notaAtividade: Double,

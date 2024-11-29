@@ -52,26 +52,33 @@ GROUP BY
 
     fun buscarPontuacoes(): List<PontuacaoMoodleDto> {
         val sql = """
-        SELECT 
-			aluno.id AS aluno_id, 
-            aluno.	email AS aluno_email,
-            curso.fullname AS curso_nome,
-            curso.id AS curso_id,
-            categoria.name AS curso_categoria,
-            FROM_UNIXTIME(nota.timemodified) AS data_entrega, 
-            item.itemname AS nome_atividade,
-            nota.rawgrademax AS nota_atividade, 
-            nota.finalgrade AS nota_aluno
-        FROM 
-            mdl_grade_grades AS nota
-        JOIN 
-            mdl_user AS aluno ON aluno.id = nota.userid
-        JOIN 
-            mdl_grade_items AS item ON item.id = nota.itemid
-        JOIN 
-            mdl_course AS curso ON curso.id = item.courseid
-		JOIN 
-			mdl_course_categories AS categoria ON categoria.id = curso.category;
+    SELECT 
+        aluno.id AS aluno_id, 
+        aluno.email AS aluno_email,
+        curso.fullname AS curso_nome,
+        curso.id AS curso_id,
+        item.itemname AS nome_atividade,
+        nota.finalgrade AS nota_aluno,
+        nota.rawgrademax AS nota_atividade, 
+        FROM_UNIXTIME(nota.timemodified) AS data_entrega
+    FROM 
+        mdl_grade_grades AS nota
+    JOIN 
+        mdl_user AS aluno ON aluno.id = nota.userid
+    JOIN 
+        mdl_grade_items AS item ON item.id = nota.itemid
+    JOIN 
+        mdl_course AS curso ON curso.id = item.courseid
+    JOIN 
+        mdl_role_assignments AS role_assign ON role_assign.userid = aluno.id
+    JOIN 
+        mdl_role AS role ON role.id = role_assign.roleid
+    WHERE 
+        item.itemtype = 'mod' AND
+        item.itemname IS NOT NULL AND
+        role.shortname = 'student'  -- Garantindo que o usuário seja um aluno
+    ORDER BY 
+        aluno.email, data_entrega;
     """
         return jdbcTemplateMoodle.query(sql) { rs, _ ->
             val dataEntrega = rs.getString("data_entrega")
@@ -90,7 +97,6 @@ GROUP BY
                     nomeAtividade = nomeAtividade ?: "Atividade não informada",
                     notaAtividade = notaAtividade,
                     cursoId = rs.getLong("curso_id"),
-                    cursoCategoria = rs.getString("curso_categoria"),
                     notaAluno = notaAluno
                 )
             }
@@ -104,11 +110,11 @@ GROUP BY
                 nomeAtividade = nomeAtividade,
                 notaAtividade = notaAtividade,
                 cursoId = rs.getLong("curso_id"),
-                cursoCategoria = rs.getString("curso_categoria"),
                 notaAluno = notaAluno
             )
         }
     }
+
 
     fun buscarTemposSessao(): List<TempoSessaoMoodleDto> {
         val sql = """
