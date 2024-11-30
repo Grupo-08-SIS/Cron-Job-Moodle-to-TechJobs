@@ -52,56 +52,44 @@ GROUP BY
 
     fun buscarPontuacoes(): List<PontuacaoMoodleDto> {
         val sql = """
-    SELECT 
-        aluno.id AS aluno_id, 
-        aluno.email AS aluno_email,
-        curso.fullname AS curso_nome,
-        curso.id AS curso_id,
-        item.itemname AS nome_atividade,
-        nota.finalgrade AS nota_aluno,
-        nota.rawgrademax AS nota_atividade, 
-        FROM_UNIXTIME(nota.timemodified) AS data_entrega
-    FROM 
-        mdl_grade_grades AS nota
-    JOIN 
-        mdl_user AS aluno ON aluno.id = nota.userid
-    JOIN 
-        mdl_grade_items AS item ON item.id = nota.itemid
-    JOIN 
-        mdl_course AS curso ON curso.id = item.courseid
-    JOIN 
-        mdl_role_assignments AS role_assign ON role_assign.userid = aluno.id
-    JOIN 
-        mdl_role AS role ON role.id = role_assign.roleid
-    WHERE 
-        item.itemtype = 'mod' AND
-        item.itemname IS NOT NULL AND
-        role.shortname = 'student'  -- Garantindo que o usuário seja um aluno
-    ORDER BY 
-        aluno.email, data_entrega;
+        SELECT 
+            aluno.id AS aluno_id, 
+            aluno.email AS aluno_email,
+            curso.fullname AS curso_nome,
+            curso.id AS curso_id,
+            item.itemname AS nome_atividade,
+            COALESCE(nota.finalgrade, NULL) AS nota_aluno, 
+            item.grademax AS nota_atividade, 
+            CASE 
+                WHEN nota.timemodified IS NOT NULL THEN FROM_UNIXTIME(nota.timemodified)
+                ELSE NULL
+            END AS data_entrega
+        FROM 
+            mdl_course AS curso
+        JOIN 
+            mdl_context AS contexto ON contexto.instanceid = curso.id AND contexto.contextlevel = 50
+        JOIN 
+            mdl_role_assignments AS atribuicao ON atribuicao.contextid = contexto.id
+        JOIN 
+            mdl_user AS aluno ON aluno.id = atribuicao.userid
+        JOIN 
+            mdl_role AS papel ON papel.id = atribuicao.roleid AND papel.shortname = 'student'
+        JOIN 
+            mdl_grade_items AS item ON item.courseid = curso.id AND item.itemtype = 'mod'
+        LEFT JOIN 
+            mdl_grade_grades AS nota ON nota.itemid = item.id AND nota.userid = aluno.id
+        ORDER BY 
+            aluno.email, curso.fullname, item.itemname;
     """
-        return jdbcTemplateMoodle.query(sql) { rs, _ ->
+
+        // Recupera as pontuações dos alunos
+        val pontuacoes = jdbcTemplateMoodle.query(sql) { rs, _ ->
             val dataEntrega = rs.getString("data_entrega")
             val nomeAtividade = rs.getString("nome_atividade")
             val notaAtividade = rs.getDouble("nota_atividade")
             val notaAluno = rs.getDouble("nota_aluno")
 
-            // Verifica se a entrega foi realizada
-            if (dataEntrega == null || nomeAtividade == null || notaAtividade == null || notaAluno == null) {
-                // Retorna um objeto com informações sobre a não entrega
-                return@query PontuacaoMoodleDto(
-                    alunoId = rs.getLong("aluno_id"),
-                    alunoEmail = rs.getString("aluno_email"),
-                    cursoNome = rs.getString("curso_nome"),
-                    dataEntrega = null,
-                    nomeAtividade = nomeAtividade ?: "Atividade não informada",
-                    notaAtividade = notaAtividade,
-                    cursoId = rs.getLong("curso_id"),
-                    notaAluno = notaAluno
-                )
-            }
-
-            // Caso contrário, retorna a pontuação normal
+            // Cria e retorna o DTO da pontuação
             PontuacaoMoodleDto(
                 alunoId = rs.getLong("aluno_id"),
                 alunoEmail = rs.getString("aluno_email"),
@@ -113,7 +101,13 @@ GROUP BY
                 notaAluno = notaAluno
             )
         }
+
+
+        return pontuacoes
     }
+
+
+
 
 
     fun buscarTemposSessao(): List<TempoSessaoMoodleDto> {

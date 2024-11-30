@@ -98,22 +98,57 @@ class TechJobsDbService(
 
     fun cadastrarPontuacoes(pontuacoes: List<PontuacaoMoodleDto>) {
         pontuacoes.forEach { pontuacao ->
+            // Buscar o aluno_id através do email na tabela usuario
+            val alunoId = jdbcTemplateTechJobs.queryForObject(
+                """
+            SELECT a.id 
+            FROM aluno a
+            JOIN usuario u ON u.id = a.id
+            WHERE u.email = ?
+        """,
+                Long::class.java,
+                pontuacao.alunoEmail
+            )
+
+            if (alunoId == null) {
+                return@forEach
+            }
+
+            // Verifica se a pontuação já existe
             val pontuacaoExistente = jdbcTemplateTechJobs.queryForList(
                 "SELECT * FROM pontuacao WHERE aluno_id = ? AND curso_id = ? AND nome_atividade = ?",
-                pontuacao.alunoId, pontuacao.cursoId, pontuacao.nomeAtividade
-            ).isEmpty()
+                alunoId, pontuacao.cursoId, pontuacao.nomeAtividade
+            ).isNotEmpty()
 
             if (pontuacaoExistente) {
+                // Se a pontuação já existir, atualiza os dados
+                val sqlAtualizarPontuacao = """
+                UPDATE pontuacao
+                SET
+                    data_entrega = ?, 
+                    nota_aluno = ?
+                WHERE aluno_id = ? AND curso_id = ? AND nome_atividade = ?
+            """
+                jdbcTemplateTechJobs.update(
+                    sqlAtualizarPontuacao,
+                    pontuacao.dataEntrega,
+                    pontuacao.notaAluno,
+                    alunoId,
+                    pontuacao.cursoId,
+                    pontuacao.nomeAtividade
+                )
+            } else {
+                // Se não existir a pontuação, insere no banco
                 val sqlInserirPontuacao = """
                 INSERT INTO pontuacao (aluno_id, aluno_email, curso_id, curso_nome, data_entrega, nome_atividade, nota_atividade, nota_aluno)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
-                data_entrega = VALUES(data_entrega),
-                nota_aluno = VALUES(nota_aluno)
+                    data_entrega = VALUES(data_entrega),
+                    nota_aluno = VALUES(nota_aluno)
             """
                 jdbcTemplateTechJobs.update(
                     sqlInserirPontuacao,
-                    pontuacao.alunoId,
+                    alunoId,
                     pontuacao.alunoEmail,
                     pontuacao.cursoId,
                     pontuacao.cursoNome,
@@ -125,6 +160,8 @@ class TechJobsDbService(
             }
         }
     }
+
+
 
     fun cadastrarTemposSessao(temposSessao: List<TempoSessaoMoodleDto>) {
 
