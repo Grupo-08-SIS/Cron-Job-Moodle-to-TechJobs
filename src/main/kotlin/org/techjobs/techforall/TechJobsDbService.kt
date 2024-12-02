@@ -106,8 +106,6 @@ class TechJobsDbService(
         }
     }
 
-
-
     fun cadastrarPontuacoes(pontuacoes: List<PontuacaoMoodleDto>) {
         pontuacoes.forEach { pontuacao ->
             // Buscar o aluno_id através do email na tabela usuario
@@ -152,8 +150,8 @@ class TechJobsDbService(
             } else {
                 // Se não existir a pontuação, insere no banco
                 val sqlInserirPontuacao = """
-                INSERT INTO pontuacao (aluno_id, aluno_email, curso_id, curso_nome, data_entrega, nome_atividade, nota_atividade, nota_aluno)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO pontuacao (aluno_id, aluno_email, curso_id, curso_nome, data_criacao, data_entrega, nome_atividade, nota_atividade, nota_aluno)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     data_entrega = VALUES(data_entrega),
                     nota_aluno = VALUES(nota_aluno)
@@ -164,6 +162,7 @@ class TechJobsDbService(
                     pontuacao.alunoEmail,
                     pontuacao.cursoId,
                     pontuacao.cursoNome,
+                    pontuacao.dataCriacao,
                     pontuacao.dataEntrega,
                     pontuacao.nomeAtividade,
                     pontuacao.notaAtividade,
@@ -172,8 +171,6 @@ class TechJobsDbService(
             }
         }
     }
-
-
 
     fun cadastrarTemposSessao(temposSessao: List<TempoSessaoMoodleDto>) {
 
