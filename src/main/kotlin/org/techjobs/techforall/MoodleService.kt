@@ -1,14 +1,12 @@
 package org.techjobs.techforall
 
-import org.techjobs.techforall.config.MoodleDbConfig
-import org.techjobs.techforall.config.TechJobsDbConfig
 import org.techjobs.techforall.dto.CursoMoodleDto
 import org.techjobs.techforall.dto.PontuacaoMoodleDto
 import org.techjobs.techforall.dto.TempoSessaoMoodleDto
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
+import org.techjobs.techforall.dto.CursoAlunoDto
 
 @Service
 class MoodleService(
@@ -17,37 +15,73 @@ class MoodleService(
 
     fun buscarCursos(): List<CursoMoodleDto> {
         val sql = """
-        SELECT
-    mdl_course.id AS id_curso,
-    mdl_course.fullname AS nome_curso,
-    categoria.name AS curso_categoria,
-    COUNT(DISTINCT atividade.id) AS total_atividades, 
-    COUNT(DISTINCT nota.userid) AS total_alunos_com_notas
-FROM
-    mdl_course
-JOIN
-    mdl_grade_items atividade ON atividade.courseid = mdl_course.id
-JOIN 
-    mdl_course_categories AS categoria ON categoria.id = mdl_course.category
-LEFT JOIN
-    mdl_grade_grades nota ON nota.itemid = atividade.id
-WHERE  
-    atividade.itemmodule != 'course' 
-GROUP BY
-    mdl_course.id, mdl_course.fullname, categoria.name;
-    """
-
-        val cursos = jdbcTemplateMoodle.query(sql) { rs, _ ->
+    SELECT 
+        curso.id AS id_curso,
+        curso.fullname AS nome_curso,
+        GROUP_CONCAT(tag.name ORDER BY tag.name SEPARATOR ', ') AS curso_categoria
+    FROM 
+        mdl_course AS curso
+    LEFT JOIN 
+        mdl_tag_instance AS tag_instance ON tag_instance.itemid = curso.id
+    LEFT JOIN 
+        mdl_tag AS tag ON tag.id = tag_instance.tagid
+    WHERE 
+        curso.format = 'topics'
+    GROUP BY 
+        curso.id
+    ORDER BY 
+        curso.id;
+"""
+        return jdbcTemplateMoodle.query(sql) { rs, _ ->
             CursoMoodleDto(
                 id = rs.getLong("id_curso"),
-                nome = rs.getString("nome_curso"),
-                categoria = rs.getString("curso_categoria"),
-                totalAtividades = rs.getInt("total_atividades"),
-                totalAtividadesDoAluno = rs.getInt("total_alunos_com_notas")
+                nome = rs.getString("nome_curso") ?: "Nome não disponível",
+                categorias = rs.getString("curso_categoria")
             )
         }
+    }
 
-        return cursos;
+    fun buscarCursosAlunos(): List<CursoAlunoDto> {
+        val sql = """
+            SELECT 
+                aluno.id AS aluno_id, 
+                aluno.email AS aluno_email,
+                curso.id AS curso_id,
+                curso.fullname AS curso_nome,
+                COUNT(item.id) AS total_atividades, 
+                SUM(CASE WHEN nota.timemodified IS NOT NULL THEN 1 ELSE 0 END) AS total_atividades_feitas
+            FROM 
+                mdl_course AS curso
+            JOIN 
+                mdl_context AS contexto ON contexto.instanceid = curso.id AND contexto.contextlevel = 50
+            JOIN 
+                mdl_role_assignments AS atribuicao ON atribuicao.contextid = contexto.id
+            JOIN 
+                mdl_user AS aluno ON aluno.id = atribuicao.userid
+            JOIN 
+                mdl_role AS papel ON papel.id = atribuicao.roleid AND papel.shortname = 'student'
+            JOIN 
+                mdl_grade_items AS item ON item.courseid = curso.id AND item.itemtype = 'mod'
+            LEFT JOIN 
+                mdl_grade_grades AS nota ON nota.itemid = item.id AND nota.userid = aluno.id
+            WHERE 
+                curso.format = 'topics'
+            GROUP BY 
+                aluno.id, aluno.email, curso.id, curso.fullname
+            ORDER BY 
+                aluno.email, curso.fullname
+        """.trimIndent()
+
+        return jdbcTemplateMoodle.query(sql) { rs, _ ->
+            CursoAlunoDto(
+                alunoId = rs.getLong("aluno_id"),
+                alunoEmail = rs.getString("aluno_email"),
+                cursoId = rs.getLong("curso_id"),
+                cursoNome = rs.getString("curso_nome"),
+                totalAtividades = rs.getInt("total_atividades"),
+                totalAtividadesFeitas = rs.getInt("total_atividades_feitas")
+            )
+        }
     }
 
     fun buscarPontuacoes(): List<PontuacaoMoodleDto> {
@@ -105,9 +139,6 @@ GROUP BY
 
         return pontuacoes
     }
-
-
-
 
 
     fun buscarTemposSessao(): List<TempoSessaoMoodleDto> {

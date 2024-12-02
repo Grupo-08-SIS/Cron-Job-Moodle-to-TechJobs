@@ -4,8 +4,10 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.dao.EmptyResultDataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.queryForObject
 import org.springframework.stereotype.Service
 import org.techjobs.techforall.config.TechJobsDbConfig
+import org.techjobs.techforall.dto.CursoAlunoDto
 import org.techjobs.techforall.dto.CursoMoodleDto
 import org.techjobs.techforall.dto.PontuacaoMoodleDto
 import org.techjobs.techforall.dto.TempoSessaoMoodleDto
@@ -17,84 +19,94 @@ class TechJobsDbService(
 ) {
 
     fun cadastrarCursos(cursos: List<CursoMoodleDto>) {
-
         cursos.forEach { curso ->
-            val categoriaExistente = try {
-                jdbcTemplateTechJobs.queryForObject(
-                    "SELECT id FROM categoria WHERE nome = ?",
-                    arrayOf(curso.categoria),
-                    Long::class.java
-                )
-            } catch (e: EmptyResultDataAccessException) {
-                null
-            }
-
-            val categoriaId = categoriaExistente ?: run {
-                val sqlInserirCategoria = "INSERT INTO categoria (nome) VALUES (?)"
-                jdbcTemplateTechJobs.update(sqlInserirCategoria, curso.categoria)
-                jdbcTemplateTechJobs.queryForObject(
-                    "SELECT LAST_INSERT_ID()",
-                    Long::class.java
-                )
-            }
-
             val cursoExistente = jdbcTemplateTechJobs.queryForList(
-                "SELECT * FROM curso_moodle WHERE id = ? AND nome = ?",
+                "SELECT * FROM curso_moodle WHERE id = ? OR nome = ?",
                 curso.id, curso.nome
-            ).isEmpty()
+            ).isNotEmpty()
 
-            if (cursoExistente) {
+            if (!cursoExistente) {
                 val sqlInserirCurso = """
-                INSERT INTO curso_moodle (id, nome)
-                VALUES (?, ?)
+                INSERT INTO curso_moodle (id, nome, categorias)
+                VALUES (?, ?, ?)
                 ON DUPLICATE KEY UPDATE
-                nome = VALUES(nome)
-            """
-                jdbcTemplateTechJobs.update(
-                    sqlInserirCurso,
-                    curso.id, curso.nome
-                )
-            }
-
-            val relacaoExistente = jdbcTemplateTechJobs.queryForObject(
-                "SELECT COUNT(*) FROM curso_categoria WHERE curso_id = ? AND categoria_id = ?",
-                arrayOf(curso.id, categoriaId),
-                Int::class.java
-            )
-
-            if (relacaoExistente == 0) {
-                val sqlInserirRelacao = """
-                INSERT INTO curso_categoria (curso_id, categoria_id)
-                VALUES (?, ?)
-            """
-                jdbcTemplateTechJobs.update(
-                    sqlInserirRelacao,
-                    curso.id, categoriaId
-                )
-            }
-
-            val cursoExistenteNaTabelaCurso = jdbcTemplateTechJobs.queryForList(
-                "SELECT * FROM curso WHERE id = ? AND nome = ?",
-                curso.id, curso.nome
-            ).isEmpty()
-
-            if (cursoExistenteNaTabelaCurso) {
-                val sqlInserirCurso = """
-            INSERT INTO curso (id, nome, total_atividades, total_atividades_do_aluno)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
                 nome = VALUES(nome),
-                total_atividades = VALUES(total_atividades),
-                total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
-        """
+                categorias = VALUES(categorias)
+            """
                 jdbcTemplateTechJobs.update(
                     sqlInserirCurso,
-                    curso.id, curso.nome, curso.totalAtividades, curso.totalAtividadesDoAluno
+                    curso.id, curso.nome, curso.categorias
                 )
             }
-
         }
     }
+
+    fun cadastrarCursosAlunos(cursosAlunos: List<CursoAlunoDto>) {
+        cursosAlunos.forEach { cursoAluno ->
+
+            val alunoId = jdbcTemplateTechJobs.queryForObject(
+                """
+            SELECT a.id 
+            FROM aluno a
+            JOIN usuario u ON u.id = a.id
+            WHERE u.email = ?
+            """,
+                Long::class.java,
+                cursoAluno.alunoEmail
+            )
+
+            if (alunoId == null) {
+                return@forEach
+            }
+
+            val cursoAlunoExistente = jdbcTemplateTechJobs.queryForList(
+                """
+            SELECT * 
+            FROM curso_aluno 
+            WHERE curso_id_moodle = ? AND aluno_id = ?
+            """,
+                cursoAluno.cursoId, alunoId
+            ).isNotEmpty()
+
+            if (!cursoAlunoExistente) {
+
+                val sqlInserirCursoAluno = """
+            INSERT INTO curso_aluno (nome, curso_id_moodle, aluno_id, aluno_email, total_atividades, total_atividades_do_aluno)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                total_atividades = VALUES(total_atividades),
+                total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
+            """
+                jdbcTemplateTechJobs.update(
+                    sqlInserirCursoAluno,
+                    cursoAluno.cursoNome,
+                    cursoAluno.cursoId,
+                    alunoId,
+                    cursoAluno.alunoEmail,
+                    cursoAluno.totalAtividades,
+                    cursoAluno.totalAtividadesFeitas
+                )
+            } else {
+
+                val sqlAtualizarCursoAluno = """
+            UPDATE curso_aluno
+            SET 
+                total_atividades = ?,
+                total_atividades_do_aluno = ?
+            WHERE curso_id_moodle = ? AND aluno_id = ?
+            """
+                jdbcTemplateTechJobs.update(
+                    sqlAtualizarCursoAluno,
+                    cursoAluno.totalAtividades,
+                    cursoAluno.totalAtividadesFeitas,
+                    cursoAluno.cursoId,
+                    alunoId
+                )
+            }
+        }
+    }
+
+
 
     fun cadastrarPontuacoes(pontuacoes: List<PontuacaoMoodleDto>) {
         pontuacoes.forEach { pontuacao ->
