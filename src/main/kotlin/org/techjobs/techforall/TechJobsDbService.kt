@@ -43,134 +43,141 @@ class TechJobsDbService(
 
     fun cadastrarCursosAlunos(cursosAlunos: List<CursoAlunoDto>) {
         cursosAlunos.forEach { cursoAluno ->
-
-            val alunoId = jdbcTemplateTechJobs.queryForObject(
-                """
-            SELECT a.id 
-            FROM aluno a
-            JOIN usuario u ON u.id = a.id
-            WHERE u.email = ?
-            """,
-                Long::class.java,
-                cursoAluno.alunoEmail
-            )
-
-            if (alunoId == null) {
-                return@forEach
-            }
-
-            val cursoAlunoExistente = jdbcTemplateTechJobs.queryForList(
-                """
-            SELECT * 
-            FROM curso_aluno 
-            WHERE curso_id_moodle = ? AND aluno_id = ?
-            """,
-                cursoAluno.cursoId, alunoId
-            ).isNotEmpty()
-
-            if (!cursoAlunoExistente) {
-
-                val sqlInserirCursoAluno = """
-            INSERT INTO curso_aluno (nome, curso_id_moodle, aluno_id, aluno_email, total_atividades, total_atividades_do_aluno)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                total_atividades = VALUES(total_atividades),
-                total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
-            """
-                jdbcTemplateTechJobs.update(
-                    sqlInserirCursoAluno,
-                    cursoAluno.cursoNome,
-                    cursoAluno.cursoId,
-                    alunoId,
-                    cursoAluno.alunoEmail,
-                    cursoAluno.totalAtividades,
-                    cursoAluno.totalAtividadesFeitas
+            try {
+                val alunoId = jdbcTemplateTechJobs.queryForObject(
+                    """
+                SELECT a.id 
+                FROM aluno a
+                JOIN usuario u ON u.id = a.id
+                WHERE u.email = ?
+                """,
+                    Long::class.java,
+                    cursoAluno.alunoEmail
                 )
-            } else {
 
-                val sqlAtualizarCursoAluno = """
-            UPDATE curso_aluno
-            SET 
-                total_atividades = ?,
-                total_atividades_do_aluno = ?
-            WHERE curso_id_moodle = ? AND aluno_id = ?
-            """
-                jdbcTemplateTechJobs.update(
-                    sqlAtualizarCursoAluno,
-                    cursoAluno.totalAtividades,
-                    cursoAluno.totalAtividadesFeitas,
-                    cursoAluno.cursoId,
-                    alunoId
-                )
+                if (alunoId == null) {
+                    return@forEach
+                }
+
+                val cursoAlunoExistente = jdbcTemplateTechJobs.queryForList(
+                    """
+                SELECT * 
+                FROM curso_aluno 
+                WHERE curso_id_moodle = ? AND aluno_id = ?
+                """,
+                    cursoAluno.cursoId, alunoId
+                ).isNotEmpty()
+
+                if (!cursoAlunoExistente) {
+                    val sqlInserirCursoAluno = """
+                INSERT INTO curso_aluno (nome, curso_id_moodle, aluno_id, aluno_email, total_atividades, total_atividades_do_aluno)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    total_atividades = VALUES(total_atividades),
+                    total_atividades_do_aluno = VALUES(total_atividades_do_aluno)
+                """
+                    jdbcTemplateTechJobs.update(
+                        sqlInserirCursoAluno,
+                        cursoAluno.cursoNome,
+                        cursoAluno.cursoId,
+                        alunoId,
+                        cursoAluno.alunoEmail,
+                        cursoAluno.totalAtividades,
+                        cursoAluno.totalAtividadesFeitas
+                    )
+                } else {
+                    val sqlAtualizarCursoAluno = """
+                UPDATE curso_aluno
+                SET 
+                    total_atividades = ?,
+                    total_atividades_do_aluno = ?
+                WHERE curso_id_moodle = ? AND aluno_id = ?
+                """
+                    jdbcTemplateTechJobs.update(
+                        sqlAtualizarCursoAluno,
+                        cursoAluno.totalAtividades,
+                        cursoAluno.totalAtividadesFeitas,
+                        cursoAluno.cursoId,
+                        alunoId
+                    )
+                }
+            } catch (e: Exception) {
+                println("Erro ao processar o aluno com email ${cursoAluno.alunoEmail}: ${e.message}")
             }
         }
     }
 
     fun cadastrarPontuacoes(pontuacoes: List<PontuacaoMoodleDto>) {
         pontuacoes.forEach { pontuacao ->
-            // Buscar o aluno_id através do email na tabela usuario
-            val alunoId = jdbcTemplateTechJobs.queryForObject(
-                """
-            SELECT a.id 
-            FROM aluno a
-            JOIN usuario u ON u.id = a.id
-            WHERE u.email = ?
-        """,
-                Long::class.java,
-                pontuacao.alunoEmail
-            )
+            try {
 
-            if (alunoId == null) {
-                return@forEach
-            }
+                val alunoId = jdbcTemplateTechJobs.queryForObject(
+                    """
+                SELECT a.id 
+                FROM aluno a
+                JOIN usuario u ON u.id = a.id
+                WHERE u.email = ?
+                """,
+                    Long::class.java,
+                    pontuacao.alunoEmail
+                )
 
-            // Verifica se a pontuação já existe
-            val pontuacaoExistente = jdbcTemplateTechJobs.queryForList(
-                "SELECT * FROM pontuacao WHERE aluno_id = ? AND curso_id = ? AND nome_atividade = ?",
-                alunoId, pontuacao.cursoId, pontuacao.nomeAtividade
-            ).isNotEmpty()
+                if (alunoId == null) {
+                    println("Aluno com email ${pontuacao.alunoEmail} não encontrado. Pulando...")
+                    return@forEach
+                }
 
-            if (pontuacaoExistente) {
-                // Se a pontuação já existir, atualiza os dados
-                val sqlAtualizarPontuacao = """
+
+                val pontuacaoExistente = jdbcTemplateTechJobs.queryForList(
+                    "SELECT * FROM pontuacao WHERE aluno_id = ? AND curso_id = ? AND nome_atividade = ?",
+                    alunoId, pontuacao.cursoId, pontuacao.nomeAtividade
+                ).isNotEmpty()
+
+                if (pontuacaoExistente) {
+
+                    val sqlAtualizarPontuacao = """
                 UPDATE pontuacao
                 SET
                     data_entrega = ?, 
                     nota_aluno = ?
                 WHERE aluno_id = ? AND curso_id = ? AND nome_atividade = ?
-            """
-                jdbcTemplateTechJobs.update(
-                    sqlAtualizarPontuacao,
-                    pontuacao.dataEntrega,
-                    pontuacao.notaAluno,
-                    alunoId,
-                    pontuacao.cursoId,
-                    pontuacao.nomeAtividade
-                )
-            } else {
-                // Se não existir a pontuação, insere no banco
-                val sqlInserirPontuacao = """
+                """
+                    jdbcTemplateTechJobs.update(
+                        sqlAtualizarPontuacao,
+                        pontuacao.dataEntrega,
+                        pontuacao.notaAluno,
+                        alunoId,
+                        pontuacao.cursoId,
+                        pontuacao.nomeAtividade
+                    )
+                } else {
+
+                    val sqlInserirPontuacao = """
                 INSERT INTO pontuacao (aluno_id, aluno_email, curso_id, curso_nome, data_criacao, data_entrega, nome_atividade, nota_atividade, nota_aluno)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     data_entrega = VALUES(data_entrega),
                     nota_aluno = VALUES(nota_aluno)
-            """
-                jdbcTemplateTechJobs.update(
-                    sqlInserirPontuacao,
-                    alunoId,
-                    pontuacao.alunoEmail,
-                    pontuacao.cursoId,
-                    pontuacao.cursoNome,
-                    pontuacao.dataCriacao,
-                    pontuacao.dataEntrega,
-                    pontuacao.nomeAtividade,
-                    pontuacao.notaAtividade,
-                    pontuacao.notaAluno
-                )
+                """
+                    jdbcTemplateTechJobs.update(
+                        sqlInserirPontuacao,
+                        alunoId,
+                        pontuacao.alunoEmail,
+                        pontuacao.cursoId,
+                        pontuacao.cursoNome,
+                        pontuacao.dataCriacao,
+                        pontuacao.dataEntrega,
+                        pontuacao.nomeAtividade,
+                        pontuacao.notaAtividade,
+                        pontuacao.notaAluno
+                    )
+                }
+            } catch (e: Exception) {
+                println("Erro ao processar a pontuação do aluno ${pontuacao.alunoEmail}: ${e.message}")
             }
         }
     }
+
 
     fun cadastrarTemposSessao(temposSessao: List<TempoSessaoMoodleDto>) {
 
